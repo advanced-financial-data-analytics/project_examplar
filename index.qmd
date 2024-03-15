@@ -1,0 +1,825 @@
+---
+title: "Forecasting Accuracy and Index Predicting"
+author: "STUDENT"
+format: 
+  html:
+    self-contained: true
+toc: true
+toc-location: left
+code-fold: true
+smooth-scroll: true
+theme: 
+  light: flatly
+editor: visual
+bibliography: references.bib
+crossref:
+  fig-title: Figure
+  tbl-title: Table
+execute:
+  echo: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse) 
+library(tidyquant)
+library(tsfe)
+library(fpp2)
+library(gt)
+library(ggplot2)
+library(dplyr)
+library(ggfortify)
+library(forecast)
+library(data.table)
+library(knitr)
+library(vtable)
+```
+
+# Introduction and Literature Review
+
+There is a range of different forecasting models that have been developed to predict stock price returns. Some are more useful than others, but they are all useful to an extent. Moreover, as we become more knowledgeable of different market conditions, the models can be adapted and upgraded to integrate new variables influencing stock returns.
+
+Predicting the stock market is a challenge that many professional investors face. As technology advances, we are aided by different algorithms and statistical inferences that are likely predictors of stock returns. Even so, the results are only approximations and not wholly accurate. This is the conclusion reached when analyzing the literature.
+
+There are many difficulties that the market faces; one of the biggest challenges that the markets face is uncertainty. The stock market incorporates an intricate network of assets and traders. Some traders are better informed than others which can create information asymmetry. This is one factor that makes it challenging to predict equity returns.
+
+Many studies focus on the relationship between different forecasting model and their effectiveness in predicting stock price returns. The main conclusion that can be drawn from reading different papers is Heisenberg's uncertainty principle. The more effort we put in to try and solve a problem, the more we move further away from the solution. The difficulty lies when market participants attempt to exploit predictability [@timmermann2008elusive]. However, as the world constantly advances, technology can influence the market. We now have another variable to add to the equation, increasing the task's difficulty. Considering this, researchers are constantly adapting and using machine learning to gain a deeper understanding.
+
+[@timmermann2008elusive] tests a range of models on US stock returns and concludes that most forecasting models performed poorly. The models are quite accurate in predicting stock returns in the short term. But long-term prediction is where the most prominent challenges lie. His paper takes on an empirical approach to analyzing US stock returns. Timmerman suggests incorporating a forecasting combination approach is better than only using a single forecast. This is why we have decided to use a range of different models in testing the returns of the S&P500 and the Russel 2000.
+
+[@taylor2017forecasting] take on a modular approach to forecasting, meaning they want to take a more practical approach instead of making assumptions. They believe that the key to forecasting is having interpretable parameters that can be intuitively adjusted for any time series model is the key to developing a more efficient model. They tested a range of time series models incorporating different variables, such as seasonality, and concluded that forecasting is possible if it is on a scale. Being able to adjust the model is critical to accuracy.
+
+[@chudziak2023predictability] is a relatively new literature looking at the predictability of stock returns using neural networks. Neural networks are a relatively new set of forecasting tools that have presented accurate results. Until recently, most of the models developed for forecasting, such as the ARIMA model, focus on the time series aspect of data. Which means looking at past values to help predict future values. Interestingly, the artificial neural network model focuses more on recognizing the underlying relationships in data sets, mimicking how the human brain decides. Investor behavior is highly influential in market prices, and this model aims to incorporate this variable into predicting stock price returns. Aided by machine learning and algorithms, it is very probable that this could be the next step in more accurate stock prediction.
+
+Using 20 years of daily data from two main US indexes, we will create a stock price prediction model of the S&P500 and Russel 2000. We thought this would be an interesting combination to test as we can compare if the stock prediction is more accurate for large or small companies. For each index, we will perform simple forecasting, moving average, simple exponential smoothing, and Autoregressive Integrated Moving Average tests to analyze the stock returns and look for discernible patterns and anomalies.
+
+Throughout this project, we will be looking at the test results and asking ourselves several questions, such as whether stock returns are elusive and can the current forecasting models be improved for the future by incorporating time series models. What can we do to make the models more effective and improve our chances of predicting stock returns in the future? Can we upgrade current time series models so they are a more efficient way to predict stock returns? We will use relevant literature to help us make reasonable assumptions and support the argument.
+
+# Data, Methods, and Model Critiques
+
+## Data Overview
+
+The data provided in the TSFE package covers major stock indices from around the world and significant currency exchange rates. The time period for the data covered is between January 29th, 1960, and January 24th, 2020. However, this data contains almost 300,000 observations and, in its current state, is of little use to anyone. The following code chunk shows the difficulty of attaining useful information from the current state. Many of the data indices and metrics do not have records going back to the 60s. The essential data must be drawn out and processed to visualize the elements better.
+
+```{r}
+#| label: TSFE-Indices
+#| collapse: true
+tsfe::indices%>% data.table()
+```
+
+This project focuses on the S&P 500 and the Russell 2000 for 20 years starting January 1st, 2020. Thus, the only columns of use are the date (column 1), Russell (c12), and the S&P 500 Composite (c13). Next, we rely on the following code chunk to create the new data sets that the rest of the paper uses. First, the code sets the start date to January 1st, 2000, and the end date to January 1st, 2020. Next, it draws out the columns for the relevant indices, sets the data displayed to the starting and end dates, and finally assigns column names to make it easier to understand the table.
+
+```{r}
+#| label: dataframe
+#| caption: Data Frame Creations
+start_date <- ymd("2000-01-01")
+end_date <- ymd("2020-01-30")
+
+#SP500 DF Creation
+dfsp <-(subset(tsfe::indices,select = c(1,13)))
+#Filter Dates
+dfsp %>% filter(between(date, as.Date(start_date), as.Date(end_date))) -> SP500
+#Assign Column Names
+colnames(SP500) <- c('date','price')
+
+#Russell DF Creation
+dfru <-(subset(tsfe::indices,select = c(1,12)))
+#Filter Dates
+dfru %>% filter(between(date, as.Date(start_date), as.Date(end_date))) -> RU2000
+#Assign Column Names
+colnames(RU2000) <- c('date','price')
+```
+
+### Log Returns
+
+Next, creating log returns offers a good visualization of performance over time by measuring the exponential growth rate. By taking the current price log and subtracting yesterday's price log, the natural growth or rate of return is the result. Since the first day of the data does not have a price before it, the code eliminates the first line. This ensures no gaps in the data. Log returns are also known for being continuously compounded; this is an additive process, unlike simple returns that are identified as a multiplicative one [@campbell1997econometrics]. There are some limitations when utilizing log returns rather than simple returns. For one, it is difficult to determine over a long period if log or simple returns are better to assess returns [@barber1997detecting]. The relationship to price movement between simple and log returns is not the same. Thus the variance of both cannot be the same. The mean log return is related to the simple return but not exact since, at any given point in the data, these returns are affected by a combination of variances and means of surrounding simple returns [@hudson2015calculating].
+
+```{r}
+#| label: Log-returns-s&p.data
+SP500_ret <- SP500 %>%
+  mutate(log_return=log(price)-log(lag(price)))
+SP500_ret = SP500_ret[-1,]
+
+RU2000_ret <- RU2000 %>%
+  mutate(log_return=log(price)-log(lag(price)))
+RU2000_ret = RU2000_ret[-1,]
+```
+
+```{r}
+#| label: fig-log-rets
+#| fig-cap: "S&P 500 and Russell 2000 Log Returns Jan 2000 - Jan 2020"
+#| fig-subcap:
+#|   - "S&P 500 Log Returns"
+#|   - "Russell 2000 Log Returns"
+#| layout-ncol: 2
+#| column: page
+#| fig-width: 6
+#| fig-height: 4
+
+SP500_ret %>% 
+  ggplot(aes(date,log_return*100,color=price)) + 
+  labs(x = "Date", y = "Log Return (%)") +
+  ggtitle("S&P 500") +
+  geom_line()
+
+RU2000_ret %>% 
+  ggplot(aes(date,log_return*100,color=price)) + 
+  labs(x = "Date", y = "Log Return (%)",) +
+  ggtitle('Russell 2000') +
+  geom_line()
+```
+
+With log returns in @fig-log-rets colorized by the price, it is possible to visualize moments of increased volatility in the market. For example, the 2007-2008 US housing crisis and subsequent recession are visible. This is a different way to project how indices may change over time when subjected to different market conditions. It is interesting to see how the S&P and the Russell perform differently. Using @tbl-log-ret-comparison, it is possible to see things such as the S&P having a higher maximum day return of 10.9% and the Russell having a lower minimum single day return of -12.6%. We also see that both indexes have a mean return greater than 0. This means that over time both assets have, on average, a positive return daily. Since both have 5,217 observations, we can conclude that outliers do not heavily affect this.
+
+```{r}
+#| label: tbl-log-ret-comparison
+#| tbl-cap: "Summary of Log Returns "
+#| tbl-subcap:
+#|   - "S&P 500 Log Return Summary"
+#|   - "Russell 2000 Log Returns Summary"
+#| layout-ncol: 2
+#| column: page
+
+st(SP500_ret, vars = c('log_return'))
+
+st(RU2000_ret, vars = c('log_return'))
+```
+
+As Log Returns are additive, it can be assumed that they are normally distributed. However, this assumption implies that returns are constant mean and variance N(0,1). In reality, with daily data, the mean tends to be greater than 0 for asset returns. This is because assets/Indices tend to gain value over time, so with daily data, it will be close but still greater than 0..
+
+```{r}
+#| label: fig-returns-nd
+#| fig-cap: "S&P 500 and Russell 2000 Log Returns with Normal Distribution Overlay"
+#| fig-subcap:
+#|   - "S&P 500"
+#|   - "Russell 2000"
+#| layout-ncol: 2
+#| column: page
+#| fig-width: 6
+#| fig-height: 4
+SP500_ret %>% 
+  ggplot(aes(x=log_return)) +
+  labs(x="Log Return", 
+    y="Density of Probability",
+    title="S&P 500 with Overlay") +
+  geom_density() +
+  stat_function(
+    fun=dnorm,
+    args=list(mean(SP500_ret$log_return),
+              sd=sd(SP500_ret$log_return)),
+    col="Darkgreen")
+
+RU2000_ret %>% 
+  ggplot(aes(x=log_return)) +
+  labs(x="Log Return",
+    y="Density of Probability",
+    title="Russell 2000 with Overlay") +
+  geom_density() +
+  stat_function(
+    fun=dnorm,
+    args=list(mean(RU2000_ret$log_return),
+              sd=sd(RU2000_ret$log_return)),
+    col="Darkblue")
+```
+
+As seen above in @fig-returns-nd, the S&P and Russell log returns are overlayed on the normal distribution. Without any analysis, the lines do not match up entirely, and therefore the assumptions of constant mean and variance are challenging to prove. By taking any period of returns, for example, from 2007 - 2008 and 2008 - 2009, based on @tbl-log-ret-comparison-1 and @tbl-log-ret-comparison-2, the mean and variance of each other will not be the same for either index. But, by simply visualizing the returns, it is not smooth, constant, or predictable. One period may have a higher mean because of outside factors such as low-interest rates, a new president, or a change in tax laws. These can all contribute to market movement, and changes can happen anytime, leading to different returns or variances in those returns.
+
+If the results of the comparison tables and overlay graphs indicated constant mean and variance, then there would be no need for forecasting. But, on the other hand, if the price was predictable based on a constant change, what point would there be in figuring out tomorrow's price? As such, there is still a need for looking forward, and forecasting techniques are the key.
+
+### Setting the Data to Forecast
+
+Forecasting stock/indices movements can provide valuable insight into the trends and possible seasonality of the market. Each forecast can give new information that can tell the story of the market based on matching predictability to actual movements. To measure this, the following forecasts have three periods where the predicted prices will be cross-examined with the actual. This is done by running each of the above models through the identified time period and using that to predict the next 25 months. This generally is viewed as a long horizon, particularly when looking at monthly data, but there is a method to this madness. Using graphical representations makes it easier to visualize the accuracy of the forecast and draw different conclusions than simply running code and going with those results.
+
+The first forecast time horizon will use data trained from Jan 2000 - Jan 2007, before the US market housing crash and the great recession, where the market dipped substantially and price volatility increased. The second period, Jan 2000 - Jan 2014, will allow the model to adjust to the recession and see it through the recovery. The final period from Jan 2000 - Jan 2020 uses the total data acquired from the TSFE package.
+
+```{r}
+#| label: Monthly_DF's
+#| warning: false
+
+SP500$month = lubridate::month(SP500$date)
+SP500$year = lubridate::year(SP500$date)
+SP500 %>% group_by(year,month) %>% summarize(priceMean = mean(price)) ->
+SP500_m
+
+
+RU2000$month = lubridate::month(RU2000$date)
+RU2000$year = lubridate::year(RU2000$date)
+RU2000 %>% group_by(year,month) %>% summarize(priceMean = mean(price)) -> RU2000_m
+```
+
+The above code chunk groups the S&P and the Russell data frames into monthly data sets and creates a new variable called "priceMean." This new variable takes the average price during a specified month during a specified year. For example, all the algorithmic mean of prices of January 2000 is taken and returned as a single price that represents the entire month. This trims the original data set from 5,218 observations down to 241.
+
+The following chunk creates a time series object with a monthly basis for forecasting throughout the rest of this report. Using time series objects makes producing prediction models within posit possible.
+
+```{r}
+#| label: Time_Series
+SP500_m_ts <- SP500_m$priceMean %>%
+  as.ts(frequency=12,start=c(2000,1),end=c(2020,1))
+
+RU2000_m_ts <- RU2000_m$priceMean %>%
+  as.ts(frequency=12,start=c(2000,1),end=c(2020,1))
+```
+
+### Create Trains for the Data
+
+Using the monthly data frames created in the [Setting the Data to Forecast] it is possible to create the end of each train. Trained data is where a forecast function will draw information to predict future observations. For example, in the following chunk, an end = c() is determined by the monthly data frames. For ending in Jan 2007, it corresponds to an index value of 85. Since the forecasts are over 25 months, to subset the actual data, a start = c(85) would result in an end = c(110).
+
+```{r}
+#| label: Train_Forecasts
+#2000-2009 S&P  
+  trainsp1 <- subset(SP500_m_ts, end = c(85))
+  sp2 <- subset(SP500_m_ts, start = c(85), end = c(110))
+#2000-2014 S&P 
+  trainsp2 <- subset(SP500_m_ts, end = c(169))
+  sp3 <- subset(SP500_m_ts, start = c(169), end = c(194))
+#2000-2020 S&P 
+  trainsp3 <- subset(SP500_m_ts, end = c(241))
+  
+#2000-2009 RU  
+  trainru1 <- subset(RU2000_m_ts, end = c(85))
+  ru2 <- subset(RU2000_m_ts, start = c(85), end = c(110))
+#2000-2014 RU 
+  trainru2 <- subset(RU2000_m_ts, end = c(169))
+  ru3 <- subset(RU2000_m_ts, start = c(169), end = c(194))
+#2000-2020 RU 
+  trainru3 <- subset(RU2000_m_ts, end = c(241))
+```
+
+Since the data acquired from the TSFE Package for this project ends in Jan 2020 we apply the same methodology to the final train. But, there is no additional subset with actual data, instead applying the knowledge learned in the 2 other time trains, its possible to determine if there is any potential accuracy to the forecasts.
+
+### Forecasting: The Why, Types, and Methods
+
+Forecasting in finance is nothing more than an educated guess on what path costs, profit, or price will take over time. These guesses are educated because everyone has access to what **happened** in the past but not what **will** happen in the future. As no one knows what tomorrow will bring, if rates go up, a bubble will burst, or markets will soar, conjectures and assumptions will drive the finance world. Every forecasting strategy relies on what happened in the past and sound judgment to predict **what might happen feasibly**. An easy example is when firms are calculating the NPV of a project. It is usually unreasonable to think the world will end tomorrow, so firms use the going concern assumption that they will survive through tomorrow. When calculating upfront costs, for the most part, they are wholly known. How much money the project will make next year is not, but a solid estimate can be made assuming the firm will still be there based on best, worst, and expected scenarios. Looking at previous projects may hint to a particular outcome and thus provide more weight to that outcome.
+
+Looking to historical data and good judgment that drives forecasting in finance. Time series data contains the actual historical movement of something, in this case, index price movements. By training models to identify patterns, trends, or shifts in data, tomorrow's outcome may be predictable. Thus, successful financial forecasting of index movements could open the door to arbitrage opportunities.
+
+However, all forecasts have some limitations. These apply to all of the forecasts present in this report, but the simplicity of some makes the limitations more prevalent. As determined by Log Returns, prices do not move in a constant direction, at a given speed, with easy-to-spot patterns. Instead, there is an element of randomness at play because if there was not, why forecast at all? Hence the random walk theory of price movements [@fama1965random; @fama1995random] eludes to the notion that the price of a security yesterday does not indicate its movements today. The only thing connecting yesterday's price to today is where it closed and opened (respectively). In this regard, forecasts will never be 100% completely accurate. There are infinite random outcomes possible, and sound judgment narrows it down, but it is a shot in the dark to get the right outcome.
+
+To measure the accuracy of each forecast two strategies were implemented.
+
+1.  Conjecture Judgement
+2.  Accuracy Function: RMSE
+
+Conjecture judgment, in this case, is common sense. Prices are not constant and move at random, is any straight line going to be exactly right? No. Nevertheless, if the prices are trending one way or another, a forecast may have more weight based on the possibility that the direction is right. This is subject to interpretation, and everyone may see one line from a different perspective than this report.
+
+The accuracy function in R is an excellent way of using statistical measurement to gauge the feasibility of a forecast. Comparing trained forecasts to actual movement can result in many different measurements. The one this report focuses on is the RMSE. Simply put, Root Mean Squared Error is the root of the squared average of the difference between predicted and actual values.
+
+$RMSE= \sqrt{\sum_{i=1}^{N}(\frac{(Actual_i-Predicted_i)^2}N)}$
+
+where. *i* is the starting index number, N is the total number of observations, Actual is the price at index *i,* Predicted price is the index at *i.*
+
+a\. Squaring eliminates any negative value.
+
+b\. Rooting makes the number smaller and therefore easier to compare.
+
+This means that the smaller RMSE a forecast has, the more accurate the forecast is, and smaller differences between predicted and actual result in better predictions. However, it is sometimes difficult to understand this measurement as for already small index prices, the difference between actual and predicted may be a challenge to start, and that results in small error values.
+
+#### Simple Forecasts
+
+Simple forecasts are precisely what the name entails; they are simple prediction models that are very useful in identifying trends and patterns in the data. But unfortunately, these prediction models are seldom accurate due to the simple assumptions tied to each model.
+
+The most common simple forecasts in econometrics are mean, naive, and drift. Mean takes the average price throughout the identified time window and assumes this will be the forward price through the forecast period. Naive uses the last price of the data and assumes this as the forecast price. It is important to note that these simple forecasts are horizontal lines, a constant price. Finally, the drift method follows the trend of the asset's performance from the data's beginning to the end.
+
+Simple forecasts have their own assumptions and limitations that make them reasonably weak in providing accurate forecasts. For example, the stock market is not generally known to be simple. If it were, everyone would make hand-over-fist returns, and brokers and analysts would be nonexistent.
+
+#### Moving Average Forecasts
+
+Within finance, a popular trend line is used for analysis, the moving average. Typically a great way to identify the recent movements of an asset is to asses its stability, volatility, and return. It uses a lag measure to determine the direction the return or price is heading. Moving average functions help to eliminate the noise that assets see throughout a time period by only using the sum average of a determined number of lag periods. This eliminates the constant fluctuations and "bounces" assets see as they are traded throughout the day. Both [@campbell1988stock] and [@fama1988dividend] confirm the hypothesis that, in the long term, moving average methods can forecast asset returns with a relatively high degree of accuracy. However, these papers use years as their time lags and horizons rather than days or months.
+
+However, MA forecasts have limitations. While MA theoretically eliminates noise and smooths out the movements, short-term averages are still affected by swings an asset may see during high volatility. Extending the time horizon and lag duration can negate this drawback. This outcome is unlikely with the data used in this report, however. Since the moving average in the following graphs uses the moving average of average monthly price data, this is a double smoothing effect where the prediction relies on already averaged data and attempts to smooth the forecast based on the sum average lag. For example, an order of 1 will be a horizontal line from the most recent price since the initial price divided by 1 equals the same price, and this would be repeated for the subsequent 24 iterations. An order of 2 will be the slope between the two most recent prices. This would indicate that smaller lag values would lead to the best results as an order of 2 was used for the observed time horizons. This should give the results a steeper slope to start and then level out.
+
+#### **Simple Exponential Smoothing**
+
+Simple Exponential Smoothing (SES) is another example of using averages of historical data to predict future outcomes. It only requires a single input apart from the training data, alpha. This creates a new element that other models do not consider, making it a more advanced measure of forecasting than simple ones. Alpha is known as the smoothing factor, with a scale of 0 - 1. The lower the alpha, the more historical observations are considered for predicting, and the higher the alpha, the more recent observations. Using the ses() function, posit will generate the best possible alpha for forecasting.
+
+SES prediction models have notable drawbacks. They are horizontal with confidence intervals that fan out to an extreme spread over the forecast horizon. It is non-seasonal and does not include a trend line, making the result straight. [@brown1961] supports the notion that this strategy is similar to a moving average because very high alpha functions only consider a single or couple of observations the same way the [Moving Average Forecasts] does.
+
+#### ARIMA
+
+Auto Regressive Integrated Moving Average, ARIMA for short, is an advanced modeling strategy that combines elements of regression (AR) and moving average (MA) by applying differentiating (I). AR refers to the past values of the variable by linear combination. I is the difference between replaced model values and actual ones. MA is the forecasted mean errors linear combination.
+
+When determining the inputs of the model, breaking it down into its parameters is the easiest. ARIMA = (p,d,q)
+
+p = Number of Auto Regressive terms (AR)
+
+d = Number of differences needed to make the data stationary (I)
+
+q = Number of lagged forecast errors in the prediction equation (MA)
+
+The function auto.arima in posit will analyze the input data and generate the best possible values of p, d, and q to minimize the AIC with a 95% confidence interval. The smaller the AIC, the better the model fits the data and forecasts. The AIC represents the difference between the log and the likelihood of the model.
+
+It is possible to create an ARIMA model without this function. P can be found using a partial correlation function and identifying the number of values significantly outside the limits before the first one within. The plot_pacf function would serve to visualize the limits and values. D is the number of differentiating before the data looks to be stationary. This can be done with the differentiating diff() function used 1 or 2 times on the data and then the autocorrelation function. Keep differentiating until the first lag goes negative. Once negative, use the previous order of differentiating. Q is found using the autocorrelation function and finding how many values are significantly outside the limit. Of course, guessing and putting new values in is also a strategy for finding the best possible outcome. But, the auto.arima function does this for us.
+
+# Results
+
+#### Create Simple Forecast Elements
+
+```{r}
+#| label: Simple-Forecasts-Creation
+  #2007
+#S&P
+  fcmSP07 <- meanf(trainsp1,h=25,level=c(1))
+  fcnSP07 <-naive(trainsp1,h=25,level=c(1))
+  fcdSP07 <-rwf(trainsp1,drift=TRUE, h=25,level=c(1))
+#RU
+  fcmRU07 <- meanf(trainru1,h=25,level=c(1))
+  fcnRU07 <-(naive(trainru1,h=25,level=c(1)))
+  fcdRU07 <-(rwf(trainru1,drift=TRUE, h=25,level=c(1)))
+  
+  #2014
+#S&P
+  fcmSP14 <- meanf(trainsp2,h=25,level=c(1))
+  fcnSP14 <-naive(trainsp2,h=25,level=c(1))
+  fcdSP14 <-rwf(trainsp2,drift=TRUE, h=25,level=c(1))
+#RU
+  fcmRU14 <- meanf(trainru2,h=25,level=c(1))
+  fcnRU14 <-(naive(trainru2,h=25,level=c(1)))
+  fcdRU14 <-(rwf(trainru2,drift=TRUE, h=25,level=c(1)))
+  
+  #2020
+#S&P
+  fcmSP20 <- meanf(trainsp3,h=25,level=c(1))
+  fcnSP20 <-naive(trainsp3,h=25,level=c(1))
+  fcdSP20 <-rwf(trainsp3,drift=TRUE, h=25,level=c(1))
+#RU
+  fcmRU20 <- meanf(trainru3,h=25,level=c(1))
+  fcnRU20 <-(naive(trainru3,h=25,level=c(1)))
+  fcdRU20 <-(rwf(trainru3,drift=TRUE, h=25,level=c(1)))
+```
+
+By creating the forecasts elements from the trained data its possible to graph these on top of the actual price movement.
+
+#### S&P 500 Simple Forecasts
+
+```{r}
+#| label: fig-SPSimFcst
+#| fig-cap: "3 time horizions for the S&P 500 and the simple forecasts"
+#| fig-subcap:
+#|   - "Forecast 2007-2009"
+#|   - "Forecast 2014-2016"
+#|   - "Forecast 2020-2022"
+#| layout-ncol: 3
+#| column: page
+#| fig-width: 8
+#| fig-height: 6
+  
+autoplot(trainsp1) +
+      autolayer(sp2, series="Actual Price Movement") +
+      autolayer(fcmSP07, series="Mean") + 
+      autolayer(fcnSP07, series="Naive") + 
+      autolayer(fcdSP07, series="Drift") +
+    labs(x="Months Since Jan 2000", y="S&P 500 Price", col="Forecast") + 
+    ggtitle('S&P 500 Index Price Simple Forecast Ending 2009')
+  
+autoplot(trainsp2) +
+      autolayer(sp3, series="Actual Price Movement") +
+      autolayer(fcmSP14, series="Mean") + 
+      autolayer(fcnSP14, series="Naive") + 
+      autolayer(fcdSP14, series="Drift") +
+    labs(x="Months Since Jan 2000", y="S&P 500 Price", col="Forecast") + 
+    ggtitle('S&P 500 Index Price Simple Forecast Ending 2016')
+
+autoplot(trainsp3) +
+      autolayer(fcmSP20, series="Mean") + 
+      autolayer(fcnSP20, series="Naive") + 
+      autolayer(fcdSP20, series="Drift") +
+    labs(x="Months Since Jan 2000", y="S&P 500 Price", col="Forecast") + 
+    ggtitle('S&P 500 Index Price Simple Forecast Ending 2022')
+```
+
+#### Russell 2000 Simple Forecasts
+
+```{r}
+#| label: fig-RUSimFcst
+#| fig-cap: "3 time horizions for the Russell 2000 and the simple forecasts"
+#| fig-subcap:
+#|   - "Forecast 2007-2009"
+#|   - "Forecast 2014-2016"
+#|   - "Forecast 2020-2022"
+#| layout-ncol: 3
+#| column: page
+#| fig-width: 8
+#| fig-height: 6
+
+autoplot(trainru1) +
+      autolayer(ru2, series="Actual Price Movement") +
+      autolayer(fcmRU07, series="Mean") + 
+      autolayer(fcnRU07, series="Naive") + 
+      autolayer(fcdRU07, series="Drift") +
+    labs(x="Months Since Jan 2000", y="Russell 2000 Price", col="Forecast") + 
+    ggtitle('Russell 2000 Index Price Simple Forecast Ending 2009')
+  
+autoplot(trainru2) +
+      autolayer(ru3, series="Actual Price Movement") +
+      autolayer(fcmRU14, series="Mean") + 
+      autolayer(fcnRU14, series="Naive") + 
+      autolayer(fcdRU14, series="Drift") +
+    labs(x="Months Since Jan 2000", y="Russell 2000 Price", col="Forecast") + 
+    ggtitle('Russell 2000 Index Price Simple Forecast Ending 2016')
+
+autoplot(trainru3) +
+      autolayer(fcmRU20, series="Mean") + 
+      autolayer(fcnRU20, series="Naive") + 
+      autolayer(fcdRU20, series="Drift") +
+    labs(x="Months Since Jan 2000", y="Russell 2000 Price", col="Forecast") + 
+    ggtitle('Russell 2000 Index Price Simple Forecast Ending 2022')
+```
+
+##### Accuracy Testing and Observations
+
+The graphs above @fig-SPSimFcst-1 and @fig-RUSimFcst-1 display the simple forecasting techniques applied to the S&P 500 and Russell 2000 ending Jan 2007. This was before the 2008 financial recession when markets were still on the rise and interest rates were climbing---some notable points to observe.
+
+1.  As expected, the mean forecast for both indices provides little helpful information. This will be the case for the rest of the simple forecasting. Knowing where the mean is provides little directional knowledge since it is a constant value.
+2.  The naive forecast where another horizontal line, just at a higher price. For the @fig-SPSimFcst-1, technically, this forecast intersects the "actual price" three times, more significant than the one time of the mean. It could be a random possibility since this period proceeded with the financial crash, where prices falling from the top are bound to pass on the way down.
+3.  The drift has a slight negative slope to it. Looking at the graph, it does not make much sense. Over the past three months, the movement has been positive. Because the final observed value is slightly below the starting value, the function ignores everything in between. This results in the drift function representing the slope between the starting and ending values.
+
+@fig-SPSimFcst-2 forecasts the S&P 500 and @fig-RUSimFcst-2 the Russell after Jan 2014. Mean and Naive provide little insight, but the ending index price for this observed period is higher than that of 2000 - 2009 for the S&P. They are still restrained to horizontal assumptions. For Russell, the naive forecast is fairly good for prediction. Even with the horizontal line, the price does not move in either direction significantly during this period. This makes naive a reasonable strategy during this period. The drift of the S&P resembles an average increase of just under 2% per year and creates a line that displays that. The Russel being represented with an average increase of around 9% per year, thus the steeper line.
+
+@fig-SPSimFcst-3 and @fig-RUSimFcst-3 show performance through the entirety of the pulled data from the TSFE package. Since this forecast does not have additional actual data to auto-layer onto the graph, based on the previous two simple forecasts, a conclusion on validity can be made. The mean gives very little helpful information. The naive is unlikely based on the rise prior to the cutoff. However, based on the random walk theory and uncertain markets, the likelihood of either model being semi-accurate is low. The drift might be the most accurate based on the market trend from 2014 - 2020. While this function is equivalent to a linear equation, the judgment says this could be a rough idea of future outcomes.
+
+#### Create Moving Average Elements
+
+```{r}
+#| label: MA-Element-Creation
+#| warning: false
+  #2007
+#S&P
+  SP_07_2MA <-ma(trainsp1,order=2,centre=FALSE)
+  SP_07_2MAf <- forecast(SP_07_2MA,h=25)
+#RU
+  RU_07_2MA <-ma(trainru1,order=2,centre=FALSE)
+  RU_07_2MAf <- forecast(RU_07_2MA,h=25)
+ 
+  #2014
+#S&P
+  SP_14_2MA <-ma(trainsp2,order=2,centre=FALSE)
+  SP_14_2MAf <- forecast(SP_14_2MA,h=25)
+#RU
+  RU_14_2MA <-ma(trainru2,order=2,centre=FALSE)
+  RU_14_2MAf <- forecast(RU_14_2MA,h=25)
+
+  #2020
+#S&P
+  SP_20_2MA <-ma(trainsp3,order=2,centre=FALSE)
+  SP_20_2MAf <- forecast(SP_20_2MA,h=25)
+#RU
+  RU_20_2MA <-ma(trainru3,order=2,centre=FALSE)
+  RU_20_2MAf <- forecast(RU_20_2MA,h=25)
+```
+
+This creates the elements necessary for moving average forecasts, using an order of 2, previously explained in [Moving Average Forecasts].
+
+#### S&P 500 Moving Average Forecasting
+
+```{r}
+#| label: fig-SPMAf
+#| fig-cap: "3 time horizions for the S&P 500 with the moving average forecast"
+#| fig-subcap:
+#|   - "Forecast 2007-2009"
+#|   - "Forecast 2014-2016"
+#|   - "Forecast 2020-2022"
+#| layout-ncol: 3
+#| column: page
+#| fig-width: 8
+#| fig-height: 6
+#| warning: false
+
+autoplot(trainsp1) + 
+    autolayer(SP_07_2MAf, series="2-MA-Forecast")+
+    autolayer(SP_07_2MA, series = '2-MA') +
+    autolayer(sp2, series="Actual Price Movement")+
+  labs(x="Months Since Jan 2000", y='SP500 Index Price', col="Forecast") +
+  ggtitle('S&P 500 Index Price Moving Average Ending 2009') 
+
+autoplot(trainsp2) + 
+    autolayer(SP_14_2MAf, series="2-MA-Forecast")+
+    autolayer(SP_14_2MA, series = '2-MA') +
+    autolayer(sp3, series="Actual Price Movement")+
+  labs(x="Months Since Jan 2000", y='SP500 Index Price', col="Forecast") +
+  ggtitle('S&P 500 Index Price Moving Average Ending 2014') 
+
+autoplot(trainsp3) + 
+    autolayer(SP_20_2MAf, series="2-MA-Forecast")+
+    autolayer(SP_20_2MA, series = '2-MA') +
+  labs(x="Months Since Jan 2000", y='SP500 Index Price', col="Forecast") +
+  ggtitle('S&P 500 Index Price Moving Average Ending 2020') 
+```
+
+#### Russell 2000 Moving Average Forecasting
+
+```{r}
+#| label: fig-RUMAf
+#| fig-cap: "3 time horizions for the Russell 2000 with the moving average forecast"
+#| fig-subcap:
+#|   - "Forecast 2007-2009"
+#|   - "Forecast 2014-2016"
+#|   - "Forecast 2020-2022"
+#| layout-ncol: 3
+#| column: page
+#| fig-width: 8
+#| fig-height: 6
+#| warning: false
+
+autoplot(trainru1) + 
+    autolayer(RU_07_2MAf, series="2-MA-Forecast")+
+    autolayer(RU_07_2MA, series = '2-MA') +
+    autolayer(ru2, series="Actual Price Movement")+
+  labs(x="Months Since Jan 2000", y='RU2000 Index Price', col="Forecast") +
+  ggtitle('RU 2000 Index Price Moving Average Ending 2009') 
+
+autoplot(trainru2) + 
+    autolayer(RU_14_2MAf, series="2-MA-Forecast")+
+    autolayer(RU_14_2MA, series = '2-MA') +
+    autolayer(ru3, series="Actual Price Movement")+
+  labs(x="Months Since Jan 2000", y='RU2000 Index Price', col="Forecast") +
+  ggtitle('RU 2000 Index Price Moving Average Ending 2014') 
+
+autoplot(trainru3) + 
+    autolayer(RU_20_2MAf, series="2-MA-Forecast")+
+    autolayer(RU_20_2MA, series = '2-MA') +
+  labs(x="Months Since Jan 2000", y='RU2000 Index Price', col="Forecast") +
+  ggtitle('RU 2000 Index Price Moving Average Ending 2020')
+```
+
+##### Accuracy Testing Moving Average
+
+```{r}
+#| label: fig-rmse-ma
+#| fig-cap: "Moving Average Forecast RMSE Accuracy Testing"
+
+SP07MA<- accuracy(SP_07_2MAf, sp2)["Test set", "RMSE"]
+SP14MA<- accuracy(SP_14_2MAf, sp3)["Test set", "RMSE"]
+RU07MA<- accuracy(RU_07_2MAf, ru2)["Test set", "RMSE"]
+RU14MA<- accuracy(RU_14_2MAf, ru3)["Test set", "RMSE"]
+
+ma <- matrix(c(SP07MA,SP14MA,RU07MA,RU14MA), ncol=1, byrow=TRUE)
+colnames(ma) = c('RMSE')
+rownames(ma) <- c('S&P2007','S&P2014','RU2007','RU2014') 
+matable <- as.table(ma)
+
+
+print(matable)
+```
+
+Using the accuracy test from the above table, numerical values can be assigned to the validity of visualizations when applying judgment techniques. Taking an initial look at the 2007 forecasting for the S&P and the Russell @fig-SPMAf-1 and @fig-RUMAf-1, the two-month moving average appears to do an impressive job in forecasting the initial 12 periods. It lands almost precisely on the actual price after 12 periods by leveling out. By applying a slight curve to the prediction, it makes sense that if in a bull market, prices would increase and eventually reach a peak. However, this project uses a horizon of 25 months, much longer than the 12 that the model did an excellent job predicting. With a longer horizon, the confidence intervals fan out to an extreme level. This makes it accurate to the 80% level throughout. A long horizon might be a drawback, especially when compared to the table above, which does not indicate good RMSE values.
+
+The average moving technique improves the RMSE values in @fig-SPMAf-2 and @fig-RUMAf-2. Not only does the coding provided in the table above support better RMSE, but the graphical representation does as well. The S&P almost ends exactly on the actual price at the end of time 25, and the Russell forecasts have low errors. This might be because the price movement over the forecasted 25 periods is drastic at the end of the time horizon. Knowing the results of the two forecasted periods, the two-month moving average strategy does a far better job of forecasting than any simple forecast. As such, the predictions of 2000 - 2022 are very feasible, especially in the short term.
+
+A notable downside to this strategy is that the previous two periods are the only valuable prices for forecasting. This is because the trends and patterns that led to those final two periods do not matter.
+
+#### Create SES Elements
+
+```{r}
+#| label: SES-Element-Creation
+#| warning: false
+  
+  #2007
+#S&P
+  fcsesSP07 <- ses(trainsp1, h = 25)
+#RU
+  fcsesRU07 <- ses(trainru1, h = 25)
+
+  #2014
+#S&P
+  fcsesSP14 <- ses(trainsp2, h = 25)
+#RU
+  fcsesRU14 <- ses(trainru2, h = 25)
+
+  #2020
+#S&P
+  fcsesSP20 <- ses(trainsp3, h = 25)
+#RU
+  fcsesRU20 <- ses(trainru3, h = 25)
+```
+
+Once again, new elements for SES forecasting must be made for graphical conversion. The above chunk serves to create the necessary elements.
+
+#### S&P 500 Exponential Smoothing Forecasting
+
+```{r}
+#| label: fig-SESSP
+#| fig-cap: "3 time horizions for the S&P 500 with the SES forecast"
+#| fig-subcap:
+#|   - "Forecast 2007-2009"
+#|   - "Forecast 2014-2016"
+#|   - "Forecast 2020-2022"
+#| layout-ncol: 3
+#| column: page
+#| fig-width: 8
+#| fig-height: 6
+#| warning: false
+
+autoplot(trainsp1) + 
+    autolayer(fcsesSP07, series="SES")+
+    autolayer(sp2, series="Actual Price Movement")+
+  labs(x="Months Since Jan 2000", y='S&P 500 Index Price', col="Forecast") +
+  ggtitle('S&P 500 Index Price SES')
+
+autoplot(trainsp2) + 
+    autolayer(fcsesSP14, series="SES")+
+    autolayer(sp3, series="Actual Price Movement")+
+  labs(x="Months Since Jan 2000", y='S&P 500 Index Price', col="Forecast") +
+  ggtitle('S&P 500 Index Price SES')
+
+autoplot(trainsp3) + 
+    autolayer(fcsesSP20, series="SES")+
+  labs(x="Months Since Jan 2000", y='S&P 500 Index Price', col="Forecast") +
+  ggtitle('S&P 500 Index Price SES')
+```
+
+#### Russell 2000 Exponential Smoothing Forecasting
+
+```{r}
+#| label: fig-SESRU
+#| fig-cap: "3 time horizions for the Russell 2000 with the SES forecast"
+#| fig-subcap:
+#|   - "Forecast 2007-2009"
+#|   - "Forecast 2014-2016"
+#|   - "Forecast 2020-2022"
+#| layout-ncol: 3
+#| column: page
+#| fig-width: 8
+#| fig-height: 6
+#| warning: false
+
+autoplot(trainru1) + 
+    autolayer(fcsesRU07, series="SES")+
+    autolayer(ru2, series="Actual Price Movement")+
+  labs(x="Months Since Jan 2000", y='Russell 2000 Index Price', col="Forecast")+
+  ggtitle('Russell 2000 Index Price SES')
+
+autoplot(trainru1) + 
+    autolayer(fcsesRU07, series="SES")+
+    autolayer(ru2, series="Actual Price Movement")+
+  labs(x="Months Since Jan 2000", y='Russell 2000 Index Price', col="Forecast")+
+  ggtitle('Russell 2000 Index Price SES')
+
+autoplot(trainru1) + 
+    autolayer(fcsesRU07, series="SES")+
+  labs(x="Months Since Jan 2000", y='Russell 2000 Index Price', col="Forecast")+
+  ggtitle('Russell 2000 Index Price SES')
+```
+
+##### Accuracy Testing SES Functions
+
+```{r}
+#| label: fig-rmse-ses
+#| fig-cap: "SES Forecast SES Accuracy Testing"
+
+SP07SES<- accuracy(fcsesSP07, sp2)["Test set", "RMSE"]
+SP14SES<- accuracy(fcsesSP14, sp3)["Test set", "RMSE"]
+RU07SES<- accuracy(fcsesRU07, ru2)["Test set", "RMSE"]
+RU14SES<- accuracy(fcsesRU14, ru3)["Test set", "RMSE"]
+
+sesm <- matrix(c(SP07SES,SP14SES,RU07SES,RU14SES), ncol=1, byrow=TRUE)
+colnames(sesm) = c('RMSE')
+rownames(sesm) <- c('S&P2007','S&P2014','RU2007','RU2014') 
+sestable <- as.table(sesm)
+
+
+print(sestable)
+```
+
+While the SES forecasting might appear impressive with how the auto alpha feature of the ses() function does its job. Nevertheless, its job gives little data that is not the same as the naive function from [Simple Forecasts]. For every function, posit determined the alpha for each model to be .9999. While this does not give data yet to be explained, it supports the random walk theory. Each model used roughly seven years of trained monthly data per forecast for all graphs of @fig-SESSP and @fig-SESRU. That means that posit determined that the only price with any value to forecasting the next price was the one before. It only looked back a period of 1 month to attain an alpha value.
+
+According to the RMSE accuracy testing, the forecasting of the Russell 2000, following the 2014 trained data, was slightly more accurate in predicting this index than the [Accuracy Testing Moving Average]. Thus making the limitation of code-only testing known, the two-month moving average testing appeared visually more accurate for all observed periods. But, the SES was slightly better for the RU 2000 after 2014.
+
+#### Create ARIMA Elements
+
+```{r}
+#| label: ARIMA-Element-Creation
+#| warning: false
+
+  #2007
+#S&P
+sparima07 <- auto.arima(trainsp1, ic = "aic")
+fcsparima07 <- forecast(sparima07, h = 25)
+#RU
+ruarima07 <- auto.arima(trainru1, ic = "aic")
+fcruarima07 <- forecast(ruarima07, h = 25)
+  
+  #2014
+#S&P
+sparima14 <- auto.arima(trainsp2, ic = "aic")
+fcsparima14 <- forecast(sparima14, h = 25)
+#RU
+ruarima14 <- auto.arima(trainru2, ic = "aic")
+fcruarima14 <- forecast(ruarima14, h = 25)
+  
+  #2020
+#S&P
+sparima20 <- auto.arima(trainsp3, ic = "aic")
+fcsparima20 <- forecast(sparima20, h = 25)
+#RU
+ruarima20 <- auto.arima(trainru3, ic = "aic")
+fcruarima20 <- forecast(ruarima20, h = 25)
+
+```
+
+The final elements to create are for the ARIMA function. The auto.arima function is set to minimize the "AIC" with the ic = "aic" command. This means the function will run through all possible p,d,q combinations and selected the version that returns the smallest AIC value.
+
+#### S&P 500 ARIMA Forecasting
+
+```{r}
+#| label: fig-arimasp
+#| fig-cap: "3 time horizions for the S&P 500 with the ARIMA forecast"
+#| fig-subcap:
+#|   - "Forecast 2007-2009"
+#|   - "Forecast 2014-2016"
+#|   - "Forecast 2020-2022"
+#| layout-ncol: 3
+#| column: page
+#| fig-width: 8
+#| fig-height: 6
+#| warning: false
+
+autoplot(trainsp1) + 
+    autolayer(fcsparima07, series="ARIMA")+
+    autolayer(sp2, series="Actual Price Movement")+
+  labs(x="Months Since Jan 2000", y='S&P 500 Index Price', col="Forecast") +
+  ggtitle('S&P 500 Index Price ARIMA [1,2,2]' )
+
+autoplot(trainsp2) + 
+    autolayer(fcsparima14, series="ARIMA")+
+    autolayer(sp3, series="Actual Price Movement")+
+  labs(x="Months Since Jan 2000", y='S&P 500 Index Price', col="Forecast") +
+  ggtitle('S&P 500 Index Price ARIMA [0,1,1]' )
+
+autoplot(trainsp3) + 
+    autolayer(fcsparima20, series="ARIMA")+
+  labs(x="Months Since Jan 2000", y='S&P 500 Index Price', col="Forecast") +
+  ggtitle('S&P 500 Index Price ARIMA [2,2,1]' )
+```
+
+#### Russell 2000 ARIMA Forecasting
+
+```{r}
+#| label: fig-arimaru
+#| fig-cap: "3 time horizions for the Russell 2000 with the ARIMA forecast"
+#| fig-subcap:
+#|   - "Forecast 2007-2009"
+#|   - "Forecast 2014-2016"
+#|   - "Forecast 2020-2022"
+#| layout-ncol: 3
+#| column: page
+#| fig-width: 8
+#| fig-height: 6
+#| warning: false
+
+autoplot(trainru1) + 
+    autolayer(fcruarima07, series="ARIMA")+
+    autolayer(ru2, series="Actual Price Movement")+
+  labs(x="Months Since Jan 2000", y='Russell 2000 Index Price', col="Forecast")+
+  ggtitle('Russell 2000 Index Price ARIMA [0,1,1]')
+
+autoplot(trainru2) + 
+    autolayer(fcruarima14, series="ARIMA")+
+    autolayer(ru3, series="Actual Price Movement")+
+  labs(x="Months Since Jan 2000", y='Russell 2000 Index Price', col="Forecast")+
+  ggtitle('Russell 2000 Index Price ARIMA [0,1,1]')
+
+autoplot(trainru3) + 
+    autolayer(fcruarima20, series="ARIMA")+
+  labs(x="Months Since Jan 2000", y='Russell 2000 Index Price', col="Forecast")+
+  ggtitle('Russell 2000 Index Price ARIMA [2,1,2]')
+
+```
+
+##### Accuracy Testing ARIMA {data-link="Accuracy Testing Moving Average"}
+
+```{r}
+#| label: fig-rmse-arima
+#| fig-cap: "ARIMA Forecast SES Accuracy Testing"
+
+SP07arima<- accuracy(fcsparima07, sp2)["Test set", "RMSE"]
+SP14arima<- accuracy(fcsparima14, sp3)["Test set", "RMSE"]
+RU07arima<- accuracy(fcruarima07, ru2)["Test set", "RMSE"]
+RU14arima<- accuracy(fcruarima14, ru3)["Test set", "RMSE"]
+
+arimam <- matrix(c(SP07arima,SP14arima,RU07arima,RU14arima), ncol=1, byrow=TRUE)
+colnames(arimam) = c('RMSE')
+rownames(arimam) = c('S&P2007','S&P2014','RU2007','RU2014') 
+
+arimatable <- as.table(arimam)
+
+
+print(arimatable)
+```
+
+Out of all the forecast models, the ARIMA is the most complicated. Every other model only accounted for 1 or 2 input variables to determine an output. ARIMA considers three input parameters that result in the lowest AIC and, if applicable, a drift/trend of the trained data. Like all other models, it assumes that historical data represents future results, but the ARIMA is a good combination for predicting nonetheless. The table above displays the RMSE values for the forecasted data to the actual data.
+
+The ARIMA model did not improve from the MA or SES functions apart from the 2014 prediction with the Russell.For all graphs with the \[0,1,1\] distinction @fig-arimasp-2, @fig-arimaru-1, and @fig-arimaru-2 this is the equivalent graph to an SES model with a different weight on the moving average. This minor change results in a slightly better RMSE on the training data and, in theory, makes the ARIMA version more accurate if the past indicates the future.
+
+For graphs with any value greater than 0 for a p parameter value, this would include some drift. @fig-arimasp-1, @fig-arimasp-3, and @fig-arimaru-3 are all examples of this. These models are a combination of SES, MA, and drift functions. With their confidence intervals, the ARIMA is realistically the best predictor of future stock prices. This assumes that the forecasted period will not see a massive shock that would stop the world in its tracks, for example, a global pandemic.
+
+# Discussion
+
+To conclude, our original aim of this project was to test different time series models to see which are most accurate in forecasting stock returns and which are elusive. We used two different indexes to compare a range of results. The model with the highest predictive power is the Autoregressive Integrated Moving Average, and the lowest predictive power is simple forecasting. The simple forecasting model provided results that were easy to interpret; however, where the weaknesses lie is giving inaccurate predictions. Our results reflect those that [@taylor2017forecasting] concluded.
+
+The ARIMA is the most sophisticated model we tested in this project. Before the project, we hypothesized that this was a likely model for the highest predictive power due to the model incorporating stronger underlying assumptions. Having stronger assumptions increases prediction accuracy and helps the model to remain parsimonious. As we can see from both the S&P500 and Russell 2000, they were the closest in predicting the actual price movements.
+
+To answer the question, are stock returns elusive to predict? On an average day when nothing extraordinary happens, stock market predictability remains quite simple as the time series data gives us an idea of the range in prices in which the indexes can vary. However, stock prediction becomes elusive when unprecedented circumstances hit the market, such as the 2008 financial crisis or a company facing a scandal. This level of uncertainty is the greatest challenge regarding stock prediction [@timmermann2008elusive].
+
+One of the weaknesses of this study is that the sole focus was on American indexes. This could have created a potential bias in the results. If there was a shift in behavior in the American economy both indexes would likely be affected similarly. This is not a fair comparison, especially when testing for predictive power. If we had compared indexes from different countries whose markets function differently from each other, the differences might have been more apparent. Then we can continue testing the predictive power of the time series models.
+
+After completing this project, what we have taken away the most is that all these models are helpful to an extent. They all incorporate different variables and assumptions to create a unique perspective on forecasting. If this project were to be repeated, it would be interesting to incorporate seasonality into the models. There is literature such as [@priestley1997seasonality] that shows that certain periods of the year when investors are more inclined to purchase stock, driving demand, therefore, increasing the share prices. Such as the December period in the US as this is approaching the end of the tax year, so investors like to take advantage of tax benefits as an example.
