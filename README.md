@@ -23,7 +23,7 @@ Your projects must reflect your original understanding, research, and code devel
 **Additional Resources**
 
 * **Course Syllabus:** [[slides](https://q-rap.connect.qub.ac.uk/AFDA/resources.html#course-slide-decks)]
-* **Academic Integrity Policy:** [Insert link to university/ department policy]
-* **Coding/Analysis Tutorials:** [List relevant resources if needed]
+* **Academic Integrity Policy:** [[Course Integrity Pledge](https://q-rap.connect.qub.ac.uk/AFDA/academic-integrity.html)]
+* **Coding/Analysis Tutorials:** [See Q-RaP Posit Cloud]
 
 **Let your creativity, analytical skills, and independent thinking shine in your unique projects!** 
