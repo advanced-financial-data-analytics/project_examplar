@@ -10,9 +10,9 @@ This repository contains an exemplary final project created by a top-performing 
 
 **Important Disclaimer**
 
-** Just so you know, this project exemplar is strictly for reference purposes. Directly copying, replicating, or heavily borrowing from this work constitutes plagiarism—a serious academic offence with significant consequences.**
+** So that you know, this project exemplar is strictly for reference purposes. Directly copying, replicating, or heavily borrowing from this work constitutes plagiarism—a serious academic offence with significant consequences.**
 
-Your projects must reflect your original understanding, research, and code development. While you're encouraged to draw insights and learn from this exemplar, your work must show your unique approach and contributions.
+Your projects must reflect your original understanding, research, and code development. While you're encouraged to draw insights and learn from this exemplar, you'll need to show your unique approach and contributions.
 
 **How to Best Utilise this Exemplar**
 
@@ -22,7 +22,7 @@ Your projects must reflect your original understanding, research, and code devel
 
 **Additional Resources**
 
-* **Course Syllabus:** [Insert link to course syllabus]
+* **Course Syllabus:** [[slides](https://q-rap.connect.qub.ac.uk/AFDA/resources.html#course-slide-decks)]
 * **Academic Integrity Policy:** [Insert link to university/ department policy]
 * **Coding/Analysis Tutorials:** [List relevant resources if needed]
 
